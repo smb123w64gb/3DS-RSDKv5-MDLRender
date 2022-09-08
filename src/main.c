@@ -173,6 +173,7 @@ void readMDL(){
             }
         }
 	printf("%f\n",vertices[0].nx);
+	printf("%i\n",offsetCur);
 	struct gpuVertex *Verts = malloc(sizeof(struct gpuVertex)*indexCount*frameCount);
 	vStride = malloc(frameCount*sizeof(int));
 	vStrideCount = frameCount;
@@ -201,6 +202,9 @@ void readMDL(){
 			}
 		}
 	}
+	for(int x = 0;x<vStrideCount;x++){
+		printf("%i\n",vStride[x]);
+	}
 	// Load the vertex shader, create a shader program and bind it
 	vshader_dvlb = DVLB_ParseFile((u32*)vshader_shbin, vshader_shbin_size);
 	shaderProgramInit(&program);
@@ -219,13 +223,15 @@ void readMDL(){
 	AttrInfo_AddLoader(attrInfo, 2,  GPU_UNSIGNED_BYTE, 4); // v2=color
 
 	// Compute the projection matrix
-	Mtx_PerspTilt(&projection, C3D_AngleFromDegrees(80.0f), C3D_AspectRatioTop, 0.01f, 1000.0f, false);
+	Mtx_PerspTilt(&projection, C3D_AngleFromDegrees(180.0f), C3D_AspectRatioTop, 0.01f, 1000.0f, false);
 
 	// Create the VBO (vertex buffer object)
-	vbo_data = linearAlloc(sizeof(Verts));
-	printf("%p",vbo_data);
-	memcpy(vbo_data, Verts, sizeof(Verts));
+	int allocation = sizeof(struct gpuVertex)*indexCount*frameCount;
+	vbo_data = linearAlloc(allocation);
+	
+	memcpy(vbo_data, Verts, allocation);
 
+	printf("%i",Verts[(indexCount*frameCount)-2].color[3]);
 	// Configure buffers
 	C3D_BufInfo* bufInfo = C3D_GetBufInfo();
 	BufInfo_Init(bufInfo);
@@ -238,7 +244,7 @@ static void sceneRender(void)
 	// Calculate the modelView matrix
 	C3D_Mtx modelView;
 	Mtx_Identity(&modelView);
-	Mtx_Translate(&modelView, 0.0, 16.0, -2.0 + 0.5*sinf(angleX), true);
+	Mtx_Translate(&modelView, 0.0, 0.0, -2.0 + 0.5*sinf(angleX), true);
 	Mtx_RotateX(&modelView, angleX, true);
 	Mtx_RotateY(&modelView, angleY, true);
 
@@ -251,7 +257,9 @@ static void sceneRender(void)
 	C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uLoc_modelView,  &modelView);
 
 	// Draw the VBO
-	C3D_DrawArrays(GPU_TRIANGLES, 0, vertexSize*sizeof(struct gpuVertex));
+	//printf("%i\n",vertexSize);
+	//printf("%i\n",vertexSize/3);
+	C3D_DrawArrays(GPU_TRIANGLES, 0, vertexSize/3);
 }
 
 int main(int argc, char** argv)
@@ -302,7 +310,7 @@ int main(int argc, char** argv)
 			C3D_FrameDrawOn(target);
 			sceneRender();
 		C3D_FrameEnd(0);
-		gspWaitForEvent(GSPGPU_EVENT_VBlank0, false);
+		//gspWaitForEvent(GSPGPU_EVENT_VBlank0, false);
 	}
 
 	//cleanup and return
