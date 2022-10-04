@@ -96,7 +96,7 @@ void renderEffect()
 }
 
 union Color {
-    char bytes[4];
+    unsigned char bytes[4];
     uint color;
 };
 struct ModelVertex {
@@ -119,11 +119,10 @@ enum ModelFlags {
     MODEL_USECOLOURS  = 1 << 2,
 };
 
-struct gpuVertex { float position[3]; float normal[3]; char color[4];};
+struct gpuVertex { float position[3]; float normal[3]; float color[4];};
 
 void readMDL(){
 	int offsetCur = 0;
-	printf("EJJKREKOEOE\n");
 	int sig = ReadInt32(&offsetCur);
 	char flags = ReadInt8(&offsetCur);
 
@@ -149,12 +148,10 @@ void readMDL(){
             }
 		}
 	short indexCount = ReadInt16(&offsetCur);
-	printf("%i\n",offsetCur);
 	short *indices = malloc(sizeof(short)*indexCount);
 	 for (int i = 0; i < indexCount; ++i) {
 		indices[i] = ReadInt16(&offsetCur);
 	 }
-	 printf("%i\n",offsetCur);
 	 for (int f = 0; f < frameCount; ++f) {
             for (int v = 0; v < vertCount; ++v) {
                 vertices[(f * vertCount) + v].x = ReadSingle(&offsetCur);
@@ -168,42 +165,30 @@ void readMDL(){
                     vertices[(f * vertCount) + v].nx = ReadSingle(&offsetCur);
                     vertices[(f * vertCount) + v].ny = ReadSingle(&offsetCur);
                     vertices[(f * vertCount) + v].nz = ReadSingle(&offsetCur);
-					//printf("%i",offsetCur);
                 }
             }
         }
-	printf("%f\n",vertices[0].nx);
-	printf("%i\n",offsetCur);
 	struct gpuVertex *Verts = malloc(sizeof(struct gpuVertex)*indexCount*frameCount);
 	vStride = malloc(frameCount*sizeof(int));
 	vStrideCount = frameCount;
-	vertexSize = indexCount;
+	vertexSize = (int)indexCount;
 	int curIdx = 0;
 	for(int f = 0;f<frameCount;f++){
 		vStride[f] = f*sizeof(struct gpuVertex)*indexCount;
 		for(int x = 0;x<indexCount; x++){
-			Verts[(f * vertCount) + x].position[0] = vertices[(f * vertCount) + indices[x]].x;
-			Verts[(f * vertCount) + x].position[1] = vertices[(f * vertCount) + indices[x]].y;
-			Verts[(f * vertCount) + x].position[2] = vertices[(f * vertCount) + indices[x]].z;
-
-			Verts[(f * vertCount) + x].normal[0] = vertices[(f * vertCount) + indices[x]].nx;
-			Verts[(f * vertCount) + x].normal[1] = vertices[(f * vertCount) + indices[x]].ny;
-			Verts[(f * vertCount) + x].normal[2] = vertices[(f * vertCount) + indices[x]].nz;
+			memcpy(&Verts[(f * vertCount) + x],&vertices[(f * vertCount) + indices[x]],sizeof(struct ModelVertex));
 			if (flags & MODEL_USECOLOURS){
-			Verts[(f * vertCount) + x].color[0] =  colors[indices[x]].bytes[0];
-			Verts[(f * vertCount) + x].color[1] =  colors[indices[x]].bytes[1];
-			Verts[(f * vertCount) + x].color[2] =  colors[indices[x]].bytes[2];
-			Verts[(f * vertCount) + x].color[3] =  colors[indices[x]].bytes[3];
+			Verts[(f * vertCount) + x].color[0] =  (float)colors[indices[x]].bytes[0]/255.0f;
+			Verts[(f * vertCount) + x].color[1] =  (float)colors[indices[x]].bytes[1]/255.0f;
+			Verts[(f * vertCount) + x].color[2] =  (float)colors[indices[x]].bytes[2]/255.0f;
+			Verts[(f * vertCount) + x].color[3] =  (float)colors[indices[x]].bytes[3]/255.0f;
 			}else{
-				Verts[(f * vertCount) + x].color[0] = 255;
-				Verts[(f * vertCount) + x].color[1] = 255;
-				Verts[(f * vertCount) + x].color[2] = 255;
-				Verts[(f * vertCount) + x].color[3] = 255;
+				Verts[(f * vertCount) + x].color[0] = 1.0f;
+				Verts[(f * vertCount) + x].color[1] = 1.0f;
+				Verts[(f * vertCount) + x].color[2] = 1.0f;
+				Verts[(f * vertCount) + x].color[3] = 1.0f;
 			}
 		}
-	}
-	for(int x = 0;x<vStrideCount;x++){
-		printf("%i\n",vStride[x]);
 	}
 	// Load the vertex shader, create a shader program and bind it
 	vshader_dvlb = DVLB_ParseFile((u32*)vshader_shbin, vshader_shbin_size);
@@ -220,10 +205,7 @@ void readMDL(){
 	AttrInfo_Init(attrInfo);
 	AttrInfo_AddLoader(attrInfo, 0, GPU_FLOAT, 3); // v0=position
 	AttrInfo_AddLoader(attrInfo, 1, GPU_FLOAT, 3); // v1=normal
-	AttrInfo_AddLoader(attrInfo, 2,  GPU_UNSIGNED_BYTE, 4); // v2=color
-
-	// Compute the projection matrix
-	Mtx_PerspTilt(&projection, C3D_AngleFromDegrees(180.0f), C3D_AspectRatioTop, 0.01f, 1000.0f, false);
+	AttrInfo_AddLoader(attrInfo, 2,  GPU_FLOAT, 4); // v2=color
 
 	// Create the VBO (vertex buffer object)
 	int allocation = sizeof(struct gpuVertex)*indexCount*frameCount;
@@ -231,11 +213,19 @@ void readMDL(){
 	
 	memcpy(vbo_data, Verts, allocation);
 
-	printf("%i",Verts[(indexCount*frameCount)-2].color[3]);
+	printf("%f",Verts[0].position[1]);
+	printf("%f",Verts[0].position[2]);
 	// Configure buffers
 	C3D_BufInfo* bufInfo = C3D_GetBufInfo();
 	BufInfo_Init(bufInfo);
 	BufInfo_Add(bufInfo, vbo_data, sizeof(struct gpuVertex), 3, 0x210);
+
+	C3D_TexEnv* env = C3D_GetTexEnv(0);
+	C3D_TexEnvInit(env);
+	C3D_TexEnvSrc(env, C3D_Both, GPU_FRAGMENT_PRIMARY_COLOR, GPU_FRAGMENT_SECONDARY_COLOR, 0);
+	C3D_TexEnvFunc(env, C3D_Both, GPU_ADD);
+
+
 	
 }
 
@@ -244,7 +234,7 @@ static void sceneRender(void)
 	// Calculate the modelView matrix
 	C3D_Mtx modelView;
 	Mtx_Identity(&modelView);
-	Mtx_Translate(&modelView, 0.0, 0.0, -2.0 + 0.5*sinf(angleX), true);
+	Mtx_Translate(&modelView, 0.0, 35.0f, 175.0f, true);
 	Mtx_RotateX(&modelView, angleX, true);
 	Mtx_RotateY(&modelView, angleY, true);
 
@@ -306,9 +296,11 @@ int main(int argc, char** argv)
 
 
 		C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
+		{
 			C3D_RenderTargetClear(target, C3D_CLEAR_ALL, 0x68B0D8FF, 0);
 			C3D_FrameDrawOn(target);
 			sceneRender();
+		}
 		C3D_FrameEnd(0);
 		//gspWaitForEvent(GSPGPU_EVENT_VBlank0, false);
 	}
@@ -321,6 +313,7 @@ int main(int argc, char** argv)
 	linearFree(vbo_data);
 	shaderProgramFree(&program);
 	DVLB_Free(vshader_dvlb);
+	C3D_Fini();
 	gfxExit();
 	return 0;
 }
